@@ -10,7 +10,7 @@ const other = '00000000-0000-4000-8000-000000000003'
 const book = '10000000-0000-4000-8000-000000000001'
 const path = '20000000-0000-4000-8000-000000000001.pdf'
 const event = '30000000-0000-4000-8000-000000000001'
-const migration = readFileSync(new URL('../supabase/migrations/20261119000100_library.sql',import.meta.url),'utf8')
+const migration = readFileSync(new URL('../supabase/migrations/20261120121939_library.sql',import.meta.url),'utf8')
 
 async function run(role: 'anon' | 'authenticated', uid: string, sql: string, params: unknown[] = []) {
   return db.transaction(async tx => {
