@@ -1,0 +1,4 @@
+project_id = "lifegreat-resource"
+
+[functions.book-download]
+verify_jwt = false
