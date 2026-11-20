@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState, type FormEvent, type ReactNode } from 'react'
-import { BookOpen, CalendarDays, Flag, Plus, X } from 'lucide-react'
+import { BookOpen, CalendarDays, Flag, Plus, Users, X } from 'lucide-react'
 import { Link, NavLink, Outlet } from 'react-router-dom'
 import { SignIn, useAuth } from './auth'
 import { backend, errorMessage, unwrap } from './data'
@@ -21,6 +21,7 @@ export function AdminLayout() {
       <NavLink to="/admin" end><BookOpen size={20} /> Book catalogue</NavLink>
       <NavLink to="/admin/moderation"><Flag size={20} /> Reviews &amp; reports</NavLink>
       <NavLink to="/admin/fellowship"><CalendarDays size={20} /> Fellowship</NavLink>
+      <NavLink to="/admin/manage-admins"><Users size={20} /> Manage Admins</NavLink>
       <Link to="/">View library</Link>
     </nav>
     <section className="admin-content"><Outlet /></section>

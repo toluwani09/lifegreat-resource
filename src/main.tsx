@@ -2,13 +2,14 @@ import { StrictMode, useLayoutEffect, useRef } from 'react'
 import { createRoot } from 'react-dom/client'
 import { BrowserRouter, Link, Route, Routes, useLocation } from 'react-router-dom'
 import { AdminBooks, AdminFellowship, AdminLayout, AdminModeration } from './admin'
-import { AuthProvider } from './auth'
+import { AuthProvider, OAuthCallback } from './auth'
+import { ManageAdmins } from './manage-admins'
 import { BookPage, FellowshipPage, Home, Library } from './library'
 import { AccountPage, Footer, Header } from './ui'
 import './styles.css'
 
 function App() {
-  const { pathname } = useLocation()
+  const { pathname, search, hash } = useLocation()
   const previousPath = useRef(pathname)
   useLayoutEffect(() => {
     if (previousPath.current === pathname) return
@@ -27,9 +28,10 @@ function App() {
         <Route path="/books" element={<Library key="books" />} />
         <Route path="/books/:slug" element={<BookPage />} />
         <Route path="/fellowship" element={<FellowshipPage />} />
-        <Route path="/account" element={<AccountPage />} />
+        <Route path="/account" element={new URLSearchParams(search).has("code") || new URLSearchParams(search).has("error") || hash.includes("error=") ? <OAuthCallback /> : <AccountPage />} />
         <Route path="/admin" element={<AdminLayout />}>
           <Route index element={<AdminBooks />} />
+          <Route path="manage-admins" element={<ManageAdmins />} />
           <Route path="moderation" element={<AdminModeration />} />
           <Route path="fellowship" element={<AdminFellowship />} />
         </Route>

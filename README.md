@@ -50,14 +50,14 @@ Existing slugs are skipped, preserving any admin changes. The [catalogue JSON](s
 
 1. Create a web OAuth client in Google Cloud. Use the callback URL displayed by the Supabase Google provider as a Google authorised redirect URI.
 2. Enable Google under Supabase Authentication providers and enter the OAuth client ID and secret there.
-3. Set the Supabase Site URL to the eventual app URL. Add allowed app redirects for `/account`, `/books/*`, and `/admin/**` on the exact local and deployed origins you use. Add `/admin` separately. For local development the origin is `http://localhost:5173`.
+3. Add `http://localhost:5173/account` to Supabase Authentication → URL Configuration → Redirect URLs for local sign-in. For production, add the exact production origin followed by `/account` (for example, `https://lifegreat-resource.pages.dev/account`) and set Site URL to the actual production origin. Successful sign-in finishes at the homepage.
 4. Have the intended admin sign in once. Copy their verified user UUID from Supabase Authentication → Users. In the SQL Editor, insert that UUID into `public.admins`:
 
 ```sql
 insert into public.admins (user_id) values ('REPLACE_WITH_VERIFIED_USER_UUID');
 ```
 
-Refresh the app or sign in again. Admin roles are controlled through the database. A reader cannot grant themselves admin access. See the [Supabase Google provider documentation](https://supabase.com/docs/guides/auth/social-login/auth-google) and [redirect URL guide](https://supabase.com/docs/guides/auth/redirect-urls).
+Refresh the app or sign in again. Existing administrators can then open **Admin → Manage Admins** to grant or revoke access for a confirmed registered reader by exact email. Changes are audited. A reader cannot grant themselves admin access. See the [Supabase Google provider documentation](https://supabase.com/docs/guides/auth/social-login/auth-google) and [redirect URL guide](https://supabase.com/docs/guides/auth/redirect-urls).
 
 ### Publish the first fellowship
 

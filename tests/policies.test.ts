@@ -1,4 +1,4 @@
-import { readFileSync } from 'node:fs'
+import { readFileSync, readdirSync } from 'node:fs'
 import { execFileSync } from 'node:child_process'
 import { PGlite } from '@electric-sql/pglite'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
@@ -10,9 +10,9 @@ const other = '00000000-0000-4000-8000-000000000003'
 const book = '10000000-0000-4000-8000-000000000001'
 const path = '20000000-0000-4000-8000-000000000001.pdf'
 const event = '30000000-0000-4000-8000-000000000001'
-const migration = readFileSync(new URL('../supabase/migrations/20261120121939_library.sql',import.meta.url),'utf8')
+const migrationDir = new URL('../supabase/migrations/',import.meta.url)
 
-async function run(role: 'anon' | 'authenticated', uid: string, sql: string, params: unknown[] = []) {
+async function run(role: 'anon' | 'authenticated' | 'service_role', uid: string, sql: string, params: unknown[] = []) {
   return db.transaction(async tx => {
     await tx.exec(`set local role ${role}`)
     await tx.query('select set_config(\'request.jwt.claim.sub\',$1,true)', [uid])
@@ -24,8 +24,8 @@ const as = (uid: string, query: string, params?: unknown[]) => run('authenticate
 
 beforeAll(async () => {
   await db.exec(`
-    create role anon; create role authenticated;
-    create schema auth; create table auth.users(id uuid primary key);
+    create role anon; create role authenticated; create role service_role bypassrls;
+    create schema auth; create table auth.users(id uuid primary key, email text unique, email_confirmed_at timestamptz);
     create function auth.uid() returns uuid language sql stable
       as $$select nullif(current_setting('request.jwt.claim.sub',true),'')::uuid$$;
     grant usage on schema auth to anon,authenticated;
@@ -36,9 +36,11 @@ beforeAll(async () => {
     grant usage on schema storage to anon,authenticated;
     grant select,insert,delete on storage.objects to anon,authenticated;
   `)
-  await db.exec(migration)
+  for (const name of readdirSync(migrationDir).filter(name => name.endsWith('.sql')).sort()) {
+    await db.exec(readFileSync(new URL(name,migrationDir),'utf8'))
+  }
   await db.exec(execFileSync(process.execPath,['scripts/catalogue-sql.mjs'],{encoding:'utf8'}))
-  await db.exec(`insert into auth.users values ('${admin}'),('${reader}'),('${other}'); insert into public.admins values ('${admin}')`)
+  await db.exec(`insert into auth.users values ('${admin}','admin@example.com',now()),('${reader}','reader@example.com',now()),('${other}','other@example.com',null); insert into public.admins values ('${admin}')`)
 }, 30000)
 
 afterAll(async () => { await db.close() })
@@ -116,4 +118,26 @@ describe('database access and publication', () => {
       {action:'published'},{action:'rescheduled'},{action:'cancelled'},{action:'unpublished'},
     ])
   })
+})
+
+it('restricts delegation, records changes once, and protects the last administrator', async () => {
+  const lookup = 'select * from public.find_admin_account($1)'
+  const change = 'select public.set_admin_access($1,$2) as changed'
+  await expect(guest(lookup,['reader@example.com'])).rejects.toThrow(/permission denied/)
+  await expect(guest(change,[reader,true])).rejects.toThrow(/permission denied/)
+  await expect(as(reader,lookup,['admin@example.com'])).rejects.toThrow(/Administrator access/)
+  await expect(as(reader,change,[reader,true])).rejects.toThrow(/Administrator access/)
+  expect(await as(admin,lookup,['Reader@EXAMPLE.COM'])).toEqual([{user_id:reader,email:'reader@example.com',is_admin:false}])
+  expect(await as(admin,lookup,['reader'])).toEqual([])
+  expect(await as(admin,lookup,['other@example.com'])).toEqual([])
+  await expect(as(admin,change,[other,true])).rejects.toThrow(/Confirmed account/)
+  expect(await as(admin,change,[reader,true])).toEqual([{changed:true}])
+  expect(await as(admin,change,[reader,true])).toEqual([{changed:false}])
+  expect(await as(reader,'select public.is_admin() as allowed')).toEqual([{allowed:true}])
+  await expect(as(admin,change,[admin,false])).rejects.toThrow(/own admin access/)
+  expect(await as(admin,change,[reader,false])).toEqual([{changed:true}])
+  expect(await as(reader,'select public.is_admin() as allowed')).toEqual([{allowed:false}])
+  expect((await db.query('select actor,target,granted from public.admin_role_audit order by id')).rows)
+    .toEqual([{actor:admin,target:reader,granted:true},{actor:admin,target:reader,granted:false}])
+  await expect(db.query('delete from auth.users where id=$1',[admin])).rejects.toThrow(/last administrator/)
 })

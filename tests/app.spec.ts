@@ -182,3 +182,63 @@ test('unavailable book and backend error show clear messages', async ({page}) =>
   await page.goto('/adults')
   await expect(page.getByRole('alert')).toHaveText(/couldn’t load the catalogue/)
 })
+
+for (const path of ['/account','/books/gutenberg-131','/admin']) {
+  test(`Google sign-in from ${path} returns to the homepage after the exchange`, async ({page}) => {
+    await mockApi(page)
+    await page.route(`${base}/auth/v1/authorize?*`, async route => {
+      const callback = new URL(route.request().url()).searchParams.get('redirect_to')
+      expect(callback).toBe('http://localhost:4173/account')
+      await route.fulfill({status:302,headers:{location:`${callback}?code=test-code`}})
+    })
+    let exchanges = 0
+    await page.route(`${base}/auth/v1/token?*`, async route => {
+      exchanges++
+      expect(route.request().postDataJSON().auth_code).toBe('test-code')
+      await route.fulfill({json:{...session,expires_in:3600},headers:{'access-control-allow-origin':'*'}})
+    })
+    await page.goto(path)
+    await page.getByRole('button',{name:'Sign in with Google'}).click()
+    await expect(page).toHaveURL('http://localhost:4173/')
+    await expect(page.getByRole('button',{name:'Sign out'})).toBeVisible()
+    expect(exchanges).toBe(1)
+  })
+}
+
+test('OAuth callback failure offers a clear retry path', async ({page}) => {
+  await mockApi(page)
+  await page.goto('/account?error=access_denied')
+  await expect(page.getByRole('alert')).toHaveText(/Google sign-in was not completed/)
+  await page.getByRole('link',{name:'Back to sign-in'}).click()
+  await expect(page.getByRole('button',{name:'Sign in with Google'})).toBeVisible()
+})
+
+test('admin confirms a role grant and revocation for an exact email match', async ({page}) => {
+  await mockApi(page,'admin')
+  const target = '22222222-2222-4222-8222-222222222222'
+  await page.route(`${base}/rest/v1/rpc/find_admin_account`, async route => {
+    expect(route.request().postDataJSON()).toEqual({account_email:'reader@example.com'})
+    await route.fulfill({json:[{user_id:target,email:'reader@example.com',is_admin:false}],headers:{'access-control-allow-origin':'*'}})
+  })
+  const changes: boolean[] = []
+  await page.route(`${base}/rest/v1/rpc/set_admin_access`, async route => {
+    const payload = route.request().postDataJSON()
+    expect(payload.account_id).toBe(target)
+    changes.push(payload.grant_access)
+    await route.fulfill({json:true,headers:{'access-control-allow-origin':'*'}})
+  })
+  await page.goto('/admin')
+  await page.getByRole('link',{name:'Manage Admins'}).click()
+  await page.getByLabel('Account email').fill('reader@example.com')
+  await page.getByRole('button',{name:'Find account'}).click()
+  await expect(page.getByRole('heading',{name:'reader@example.com'})).toBeVisible()
+  await page.getByRole('button',{name:'Grant admin access'}).click()
+  await expect(page.getByText('Give this account full administrator access?')).toBeVisible()
+  expect(changes).toEqual([])
+  await page.getByRole('button',{name:'Confirm grant'}).click()
+  await expect(page.getByText('Admin access granted.')).toBeVisible()
+  await page.getByRole('button',{name:'Revoke admin access'}).click()
+  await page.getByRole('button',{name:'Confirm revocation'}).click()
+  await expect(page.getByText('Admin access revoked.')).toBeVisible()
+  expect(changes).toEqual([true,false])
+})

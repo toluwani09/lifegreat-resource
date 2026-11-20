@@ -4,7 +4,7 @@ import { upcomingFellowships, type Book, type Fellowship } from './model'
 
 const url = import.meta.env.VITE_SUPABASE_URL
 const key = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY
-export const client = url && key ? createClient(url, key, { auth: { flowType: 'pkce' } }) : null
+export const client = url && key ? createClient(url, key, { auth: { flowType: 'pkce', detectSessionInUrl: false } }) : null
 
 export function backend() {
   if (!client) throw new Error('The library services haven’t been configured yet.')
