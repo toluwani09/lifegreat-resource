@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { errorMessage } from './data'
 
 export function useLoad<T>(loader: () => Promise<T>, refresh = false) {
-  const [state, set] = useState<{ data?: T; error?: string; loading: boolean }>({loading: true})
+  const [state, set] = useState<{ data?: T; error?: string; loading: boolean; loader?: typeof loader }>({loading: true})
   useEffect(() => {
     let active = true
     let sequence = 0
@@ -10,9 +10,9 @@ export function useLoad<T>(loader: () => Promise<T>, refresh = false) {
       const version = ++sequence
       try {
         const data = await loader()
-        if (active && version === sequence) set({ data, loading: false })
+        if (active && version === sequence) set({ data, loading: false, loader })
       } catch (error) {
-        if (active && version === sequence) set({ error: errorMessage(error), loading: false })
+        if (active && version === sequence) set({ error: errorMessage(error), loading: false, loader })
       }
     }
     void load()
@@ -25,5 +25,5 @@ export function useLoad<T>(loader: () => Promise<T>, refresh = false) {
       window.removeEventListener('focus', onFocus)
     }
   }, [loader, refresh])
-  return state
+  return state.loader === loader ? state : {loading:true}
 }

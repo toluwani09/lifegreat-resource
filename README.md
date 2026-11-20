@@ -79,3 +79,11 @@ npm run test:e2e
 ```
 
 The unit and policy suite runs the migration in embedded PostgreSQL with test equivalents of the Supabase Auth and Storage schemas. The browser suite exercises desktop and mobile layouts and reader and admin flows against a simulated Supabase API. After configuring a real project, smoke-test Google sign-in, a PDF/EPUB upload and guest download, access after unpublishing, and a fellowship event including calendar export and the Meet link. These checks require the actual provider accounts.
+
+## Import recent editions
+
+From the project folder, run `node scripts/catalogue-dry-run.mjs path/to/catalogue.json` (or use a CSV with the same column names). It validates rows locally and reports duplicates within the file. It does not connect to Supabase or check external URLs.
+
+In the signed-in admin dashboard, choose **Catalogue imports**, add a batch name, and select the file. **Dry run** also checks the database for existing or staged editions. **Stage new editions** creates pending batches of up to 200 rows. Use **Review batch** to inspect the edition source, rights evidence and download link. Confirm the review before selecting **Publish reviewed batch**. A pending batch is private. The original Project Gutenberg titles are outside the recent-edition import.
+
+Required fields are slug, title, author, publisher, edition, publication_year, language, audience, topic, subject, scholarly_level, format, description, source_name, source_url, rights, rights_url, attribution and verified_on. Set reading_level for children using an existing reading-level label. An optional download_url points to a verified source file; omit it to use the official access page. Format is PDF or EPUB. The verification date uses YYYY-MM-DD.

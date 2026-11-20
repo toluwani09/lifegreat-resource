@@ -22,6 +22,7 @@ export function AdminLayout() {
       <NavLink to="/admin/moderation"><Flag size={20} /> Reviews &amp; reports</NavLink>
       <NavLink to="/admin/fellowship"><CalendarDays size={20} /> Fellowship</NavLink>
       <NavLink to="/admin/manage-admins"><Users size={20} /> Manage Admins</NavLink>
+      <NavLink to="/admin/catalogue-import"><BookOpen size={20} /> Catalogue imports</NavLink>
       <Link to="/">View library</Link>
     </nav>
     <section className="admin-content"><Outlet /></section>

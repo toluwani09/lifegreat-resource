@@ -1,6 +1,6 @@
 import { createClient } from '@supabase/supabase-js'
 import starter from './starter-catalogue.json'
-import { upcomingFellowships, type Book, type Fellowship } from './model'
+import { filterBooks, upcomingFellowships, type Book, type BookFilters, type Fellowship } from './model'
 
 const url = import.meta.env.VITE_SUPABASE_URL
 const key = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY
@@ -16,16 +16,25 @@ export function unwrap<T>({ data, error }: { data: T; error: {message: string} |
   return data
 }
 
-export async function getBooks(): Promise<Book[]> {
-  if (!client) return starter as Book[]
-  const books: Book[] = []
-  const size = 100
-  for (let offset = 0; ; offset += size) {
-    const page = unwrap(await client.from('books').select('*').eq('status','published')
-      .order('title').order('id').range(offset, offset + size - 1)) as Book[]
-    books.push(...page)
-    if (page.length < size) return books
+export type BookCardData = Pick<Book, 'id' | 'slug' | 'title' | 'author' | 'audience' | 'topic' | 'reading_level'>
+export const cataloguePageSize = 16
+
+export async function searchCatalogue(filters: BookFilters, page = 1, size = cataloguePageSize) {
+  const offset = (page - 1) * size
+  if (!client) {
+    const matches = filterBooks(starter as Book[],filters)
+    return {books:matches.slice(offset,offset+size) as BookCardData[],total:matches.length}
   }
+  return unwrap(await client.rpc('search_catalogue', {
+    phrase:filters.query ?? '', audience_filter:filters.audience ?? '', topic_filter:filters.topic ?? '',
+    level_filter:filters.level ?? '', language_filter:filters.language ?? '', subject_filter:filters.subject ?? '',
+    year_filter:filters.year ?? null, format_filter:filters.format ?? '', page_offset:offset,page_size:size,
+  })) as {books:BookCardData[];total:number}
+}
+
+export async function getFeaturedBooks() {
+  const pages = await Promise.all([searchCatalogue({audience:'Adults'},1,2),searchCatalogue({audience:'Children'},1,2)])
+  return pages.flatMap(page => page.books)
 }
 
 export async function getBook(slug: string): Promise<Book | null> {

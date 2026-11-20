@@ -9,6 +9,12 @@ export type BookStatus = 'draft' | 'published' | 'unpublished'
 export type EventStatus = 'draft' | 'published' | 'cancelled' | 'unpublished'
 
 export interface Book {
+  publication_year?: number | null
+  subject?: string | null
+  publisher?: string | null
+  scholarly_level?: string | null
+  attribution?: string | null
+  rights_url?: string | null
   id: string
   slug: string
   title: string
@@ -42,16 +48,22 @@ export interface Fellowship {
 export interface Review { rating: number; body: string; updated_at: string }
 export interface OwnReview extends Review { status: 'pending' | 'approved' | 'hidden' }
 
-export function filterBooks(books: Book[], filters: {
+export interface BookFilters {
   audience?: Audience; query?: string; topic?: string; level?: string; language?: string
-}) {
+  year?: number; subject?: string; format?: string
+}
+
+export function filterBooks(books: Book[], filters: BookFilters) {
   const tokens = filters.query?.trim().toLocaleLowerCase().split(/\s+/).filter(Boolean) ?? []
   return books.filter(book =>
     book.status === 'published' &&
     (!filters.audience || book.audience === filters.audience) &&
     (!filters.topic || book.topic === filters.topic) &&
-    (!filters.level || book.reading_level === filters.level) &&
-    (!filters.language || book.language === filters.language) &&
+    (!filters.level || book.reading_level === filters.level || book.scholarly_level === filters.level) &&
+    (!filters.language || book.language.toLowerCase() === filters.language.toLowerCase()) &&
+    (!filters.year || book.publication_year === filters.year) &&
+    (!filters.subject || book.subject?.toLowerCase().includes(filters.subject.toLowerCase())) &&
+    (!filters.format || book.format === filters.format) &&
     tokens.every(token => `${book.title} ${book.author}`.toLocaleLowerCase().includes(token)),
   )
 }

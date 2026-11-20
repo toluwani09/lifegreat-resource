@@ -1,10 +1,10 @@
 import { useCallback, useState, type FormEvent } from 'react'
 import { Link, useParams, useSearchParams } from 'react-router-dom'
 import { ArrowDownToLine, BookOpen, CalendarDays, Flag, GraduationCap, Heart, LibraryBig, Star } from 'lucide-react'
-import { backend, client, errorMessage, getBook, getBooks, getFellowships, hostedDownload, unwrap } from './data'
+import { backend, client, errorMessage, getBook, getFeaturedBooks, searchCatalogue, cataloguePageSize, getFellowships, hostedDownload, unwrap } from './data'
 import { SignIn, useAuth } from './auth'
 import { useLoad } from './hooks'
-import { filterBooks, levels, reasons, topics, type Audience, type Book, type OwnReview, type Review } from './model'
+import { levels, reasons, topics, type Audience, type Book, type OwnReview, type Review } from './model'
 import { BookCard, BookCover, EventActions, EventDate, SearchForm, Select, Status } from './ui'
 
 function CuratedCollections() {
@@ -20,11 +20,9 @@ function CuratedCollections() {
 }
 
 export function Home() {
-  const { data: books, error, loading } = useLoad(getBooks)
+  const { data: featured = [], error, loading } = useLoad(getFeaturedBooks)
   const schedule = useLoad(getFellowships, true)
   const next = schedule.data?.[0]
-  const featured = [filterBooks(books ?? [], {audience:'Adults'}).slice(0,2),
-    filterBooks(books ?? [], {audience:'Children'}).slice(0,2)].flat()
   return <>
     <section className="hero">
       <div className="container hero-inner">
@@ -64,21 +62,37 @@ export function Home() {
 
 export function Library({ audience }: {audience?: Audience}) {
   const [params, setParams] = useSearchParams()
-  const { data: all = [], error, loading } = useLoad(getBooks)
   const query = params.get('q') ?? ''
   const topic = params.get('topic') ?? ''
   const child = audience === 'Children'
-  const level = child ? params.get('level') ?? '' : ''
-  const language = child ? params.get('language') ?? '' : ''
-  const matching = filterBooks(all, { audience, topic, query, level, language })
-  const languages = Array.from(new Set(filterBooks(all,{audience:'Children'}).map(book => book.language))).sort()
-  const limit = 16
-  const [shown, setShown] = useState(limit)
+  const language = params.get('language') ?? ''
+  const level = params.get('level') ?? ''
+  const subject = params.get('subject') ?? ''
+  const format = params.get('format') ?? ''
+  const year = /^\d{4}$/.test(params.get('year') ?? '') ? Number(params.get('year')) : undefined
+  const page = Math.min(6251, Math.max(1, Number.parseInt(params.get('page') ?? '1',10) || 1))
+  const loadPage = useCallback(() => searchCatalogue({audience,query,topic,language,level,subject,format,year},page),
+    [audience,query,topic,language,level,subject,format,year,page])
+  const { data, error, loading } = useLoad(loadPage)
+  const matching = data?.books ?? []
+  const total = data?.total ?? 0
   function change(key: string, value: string) {
-    setShown(limit)
     const update = new URLSearchParams(params)
+    if (key !== 'page') update.delete('page')
     if (value) update.set(key, value)
     else update.delete(key)
+    setParams(update)
+  }
+  function applyDetails(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    const form = new FormData(event.currentTarget)
+    const update = new URLSearchParams(params)
+    update.delete('page')
+    for (const key of ['language','subject','year']) {
+      const value = String(form.get(key) ?? '').trim()
+      if (value) update.set(key,value)
+      else update.delete(key)
+    }
     setParams(update)
   }
   const action = audience ? `/${audience.toLowerCase()}` : '/books'
@@ -94,22 +108,31 @@ export function Library({ audience }: {audience?: Audience}) {
         <Select key={`topic-${topic}`} name="topic" label="Topic" defaultValue={topic} onChange={value => change('topic',value)}>
           <option value="">All topics</option>{topics.map(option => <option key={option}>{option}</option>)}
         </Select>
-        {child && <>
-          <Select key={`level-${level}`} name="level" label="Reading level" defaultValue={level} onChange={value => change('level',value)}>
-            <option value="">All reading levels</option>{levels.map(option => <option key={option}>{option}</option>)}
-          </Select>
-          <Select key={`language-${language}`} name="language" label="Language" defaultValue={language} onChange={value => change('language',value)}>
-            <option value="">All languages</option>{languages.map(option => <option key={option}>{option}</option>)}
-          </Select>
-        </>}
-        {(query || topic || level || language) && <Link to={action}>Clear filters</Link>}
+        <Select key={`level-${level}`} name="level" label="Reading level" defaultValue={level} onChange={value => change('level',value)}>
+          <option value="">All reading levels</option>
+          {[...levels, "Ages 0–8", "Early readers", ...(!child ? ['General adult','Undergraduate'] : [])].map(option => <option key={option}>{option}</option>)}
+        </Select>
+        <Select key={`format-${format}`} name="format" label="Format" defaultValue={format} onChange={value => change('format',value)}>
+          <option value="">All formats</option><option>EPUB</option><option>PDF</option>
+        </Select>
+        <form className="grid gap-2" key={`${language}/${subject}/${year}`} onSubmit={applyDetails}>
+          <label className="field"><span>Language</span><input name="language" defaultValue={language} placeholder="English" maxLength={80} /></label>
+          <label className="field"><span>Subject</span><input name="subject" defaultValue={subject} placeholder="Literacy or theology" maxLength={120} /></label>
+          <label className="field"><span>Publication year</span><input name="year" type="number" min={1000} max={2999} defaultValue={year} /></label>
+          <button className="button button-outline">Apply filters</button>
+        </form>
+        {(query || topic || level || language || subject || year || format) && <Link to={action}>Clear filters</Link>}
       </aside>
       <div className="results">
         {loading ? <Status>Loading books…</Status> : error ? <Status error>We couldn’t load the catalogue. Refresh and try again.</Status> : <>
-          <p className="result-count" role="status">{matching.length} {matching.length === 1 ? 'book' : 'books'}{query && <> matching “{query}”</>}</p>
-          {matching.length ? <div className="book-grid">{matching.slice(0, shown).map(book => <BookCard key={book.id} book={book} labelAudience={!audience} />)}</div>
+          <p className="result-count" role="status">{total} {total === 1 ? 'book' : 'books'}{query && <> matching “{query}”</>}</p>
+          {matching.length ? <div className="book-grid">{matching.map(book => <BookCard key={book.id} book={book} labelAudience={!audience} />)}</div>
             : <Status>No matching books. Try a different search or clear the filters.</Status>}
-          {matching.length > shown && <button className="button button-outline more" onClick={() => setShown(shown + limit)}>Show more books</button>}
+          {(page > 1 || total > cataloguePageSize) && <nav className="actions more" aria-label="Catalogue pages">
+            <button className="button button-outline" disabled={page === 1} onClick={() => change('page',String(page-1))}>Previous page</button>
+            <span>Page {page} of {Math.max(1,Math.ceil(total/cataloguePageSize))}</span>
+            <button className="button button-outline" disabled={page*cataloguePageSize >= total} onClick={() => change('page',String(page+1))}>Next page</button>
+          </nav>}
         </>}
       </div>
     </div>
@@ -230,6 +253,12 @@ export function BookPage() {
           <dt>Edition</dt><dd>{book.edition}</dd>
           <dt>Format</dt><dd>{book.format ?? 'See source'}{book.file_size ? ` · ${(book.file_size / 1024 / 1024).toFixed(2)} MB` : ''}</dd>
           <dt>Language</dt><dd>{book.language}</dd>
+          {book.publisher && <><dt>Publisher</dt><dd>{book.publisher}</dd></>}
+          {book.publication_year && <><dt>Publication year</dt><dd>{book.publication_year}</dd></>}
+          {book.subject && <><dt>Subject</dt><dd>{book.subject}</dd></>}
+          {book.scholarly_level && <><dt>Reading level</dt><dd>{book.scholarly_level}</dd></>}
+          {book.attribution && <><dt>Attribution</dt><dd>{book.attribution}</dd></>}
+          {book.rights_url && <><dt>Rights</dt><dd><a href={book.rights_url} target="_blank" rel="noreferrer">View rights evidence</a></dd></>}
         </dl>
         <ReaderFeedback key={book.id} book={book} />
       </div>

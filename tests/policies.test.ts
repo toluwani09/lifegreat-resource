@@ -141,3 +141,43 @@ it('restricts delegation, records changes once, and protects the last administra
     .toEqual([{actor:admin,target:reader,granted:true},{actor:admin,target:reader,granted:false}])
   await expect(db.query('delete from auth.users where id=$1',[admin])).rejects.toThrow(/last administrator/)
 })
+
+it('stages and publishes only approved, validated editions while protecting the classic catalogue', async () => {
+  const edition = {slug:'test-recent-edition',title:'An education practice book',author:'An Example',description:'Test fixture',
+    edition:'2024 PDF edition',source_name:'Example',publisher:'Example',rights:'Fixture only',attribution:'Example 2024',
+    subject:'Literacy',language:'English',scholarly_level:'Early readers',audience:'Children',topic:'Education',
+    reading_level:'Read together',publication_year:2024,verified_on:'2024-10-01',source_url:'https://example.com/book',
+    rights_url:'https://example.com/rights',download_url:null,format:'PDF'}
+  const stage = 'select public.stage_catalogue_batch($1,$2::jsonb,$3) as result'
+  await expect(as(reader,stage,['Fixture',JSON.stringify([edition]),true])).rejects.toThrow(/Administrator/)
+  await expect(as(admin,stage,['Fixture',JSON.stringify([{...edition,publication_year:2019}]),true])).rejects.toThrow(/Invalid edition/)
+  expect(await as(admin,stage,['Fixture',JSON.stringify([edition,edition]),true])).toEqual([{result:{accepted:1,duplicates:1,batch_id:null}}])
+  const rows = await as(admin,stage,['Fixture',JSON.stringify([edition]),false]) as {result:{batch_id:string}}[]
+  const batch = rows[0].result.batch_id
+  const query = "select public.search_catalogue(phrase => 'An Example',year_filter => 2024,format_filter => 'PDF') as result"
+  expect(await guest(query)).toEqual([{result:{books:[],total:0}}])
+  await expect(guest('select * from public.catalogue_staging')).rejects.toThrow(/permission denied/)
+  const publish = 'select public.publish_catalogue_batch($1) as count'
+  await expect(as(reader,publish,[batch])).rejects.toThrow(/Administrator/)
+  expect(await as(admin,publish,[batch])).toEqual([{count:1}])
+  expect(await as(admin,publish,[batch])).toEqual([{count:1}])
+  expect(await guest(query)).toMatchObject([{result:{total:1,books:[{slug:edition.slug}]}}])
+  expect(await as(admin,stage,['Fixture',JSON.stringify([edition]),true])).toEqual([{result:{accepted:0,duplicates:1,batch_id:null}}])
+  expect(await guest("select count(*)::int as count from public.books where slug like 'gutenberg-%'")).toEqual([{count:40}])
+})
+
+it('returns a single page from a catalogue of 2,000 additional editions', async () => {
+  await db.exec(`insert into public.books (slug,title,author,description,audience,topic,source_name,source_url,edition,rights,
+    status,publication_year,subject,format,scholarly_level)
+    select 'size-fixture-'||i,'Scale fixture '||lpad(i::text,4,'0'),'Testing Author','Fixture','Adults','Education',
+    'Test','https://example.com/book/'||i,'Distinct edition '||i,'Test rights','published',2025,'Testing','PDF','Undergraduate'
+    from generate_series(1,2000) as i`)
+  const rows = await guest(`select public.search_catalogue(phrase=>'testing scale',audience_filter=>'Adults',
+    topic_filter=>'Education',year_filter=>2025,language_filter=>'English',subject_filter=>'Testing',
+    level_filter=>'Undergraduate',format_filter=>'PDF',page_offset=>16,page_size=>16) as result`) as
+    {result:{total:number;books:{slug:string;description?:string}[]}}[]
+  expect(rows[0].result.total).toBe(2000)
+  expect(rows[0].result.books).toHaveLength(16)
+  expect(rows[0].result.books[0]).toMatchObject({slug:'size-fixture-17'})
+  expect(rows[0].result.books[0]).not.toHaveProperty('description')
+})

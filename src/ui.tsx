@@ -1,9 +1,9 @@
 import { useState, type ReactNode } from 'react'
 import { AlertTriangle, BookOpen, CalendarDays, ChevronDown, ExternalLink, Leaf, Search, Video } from 'lucide-react'
 import { Link, NavLink, useNavigate } from 'react-router-dom'
-import { eventEnd, calendarText, formatEventDate, type Book, type Fellowship } from './model'
+import { eventEnd, calendarText, formatEventDate, type Fellowship } from './model'
 import { SignIn, useAuth } from './auth'
-import { backend, errorMessage } from './data'
+import { backend, errorMessage, type BookCardData } from './data'
 
 export function Brand() {
   return <Link to="/" className="brand" aria-label="LifeGreat Resource home">
@@ -57,6 +57,7 @@ export function SearchForm({ query = '', action = '/books' }: {query?: string; a
     event.preventDefault()
     const value = String(new FormData(event.currentTarget).get('query') ?? '').trim()
     const params = action === window.location.pathname ? new URLSearchParams(window.location.search) : new URLSearchParams()
+    params.delete('page')
     if (value) params.set('q', value)
     else params.delete('q')
     void navigate(params.size ? `${action}?${params}` : action)
@@ -67,7 +68,7 @@ export function SearchForm({ query = '', action = '/books' }: {query?: string; a
   </form>
 }
 
-export function BookCover({ book }: {book: Book}) {
+export function BookCover({ book }: {book: BookCardData}) {
   const hue = Array.from(book.slug).reduce((sum, char) => sum + char.charCodeAt(0), 0) % 6
   return <div aria-hidden="true" className={`cover cover-${hue} ${book.audience === 'Children' ? 'cover-child' : ''}`}>
     <div className="cover-border">
@@ -77,7 +78,7 @@ export function BookCover({ book }: {book: Book}) {
   </div>
 }
 
-export function BookCard({ book, labelAudience = false }: {book: Book; labelAudience?: boolean}) {
+export function BookCard({ book, labelAudience = false }: {book: BookCardData; labelAudience?: boolean}) {
   return <article className="book-card">
     <Link to={`/books/${book.slug}`}>
       <BookCover book={book} />

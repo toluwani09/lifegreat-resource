@@ -1,6 +1,6 @@
 import { expect, test, type Page } from '@playwright/test'
 import { readFileSync } from 'node:fs'
-import { type Book, type Fellowship } from '../src/model'
+import { filterBooks, type Book, type Fellowship } from '../src/model'
 
 const starter = JSON.parse(readFileSync(new URL('../src/starter-catalogue.json', import.meta.url), 'utf8')) as Book[]
 
@@ -29,6 +29,12 @@ async function mockApi(page: Page, role: 'guest' | 'reader' | 'admin' = 'guest')
       'access-control-allow-origin':'*','access-control-allow-methods':'GET,POST,PATCH,OPTIONS',
       'access-control-allow-headers':req.headers()['access-control-request-headers'] ?? '*',
     }})
+    if (endpoint === 'search_catalogue') {
+      const f = req.postDataJSON()
+      const books = filterBooks(starter,{query:f.phrase,audience:f.audience_filter,topic:f.topic_filter,subject:f.subject_filter,
+        language:f.language_filter,level:f.level_filter,year:f.year_filter,format:f.format_filter})
+      return reply({books:books.slice(f.page_offset,f.page_offset+f.page_size),total:books.length})
+    }
     if (endpoint === 'books') {
       const slug = url.searchParams.get('slug')?.slice(3)
       return reply(slug ? (starter.find(book => book.slug === slug) ?? null) : starter)
@@ -178,7 +184,7 @@ test('unavailable book and backend error show clear messages', async ({page}) =>
   await mockApi(page)
   await page.goto('/books/unavailable')
   await expect(page.getByRole('alert')).toHaveText('This book is unavailable.')
-  await page.route(`${base}/rest/v1/books?*`,route => route.fulfill({status:400,json:{message:'Unavailable'}, headers:{'access-control-allow-origin':'*'}}))
+  await page.route(`${base}/rest/v1/rpc/search_catalogue`,route => route.fulfill({status:400,json:{message:'Unavailable'}, headers:{'access-control-allow-origin':'*'}}))
   await page.goto('/adults')
   await expect(page.getByRole('alert')).toHaveText(/couldn’t load the catalogue/)
 })
@@ -241,4 +247,26 @@ test('admin confirms a role grant and revocation for an exact email match', asyn
   await page.getByRole('button',{name:'Confirm revocation'}).click()
   await expect(page.getByText('Admin access revoked.')).toBeVisible()
   expect(changes).toEqual([true,false])
+})
+
+test('catalogue requests only the selected 16-book page at scale', async ({page}) => {
+  await mockApi(page)
+  const offsets: number[] = []
+  await page.route(`${base}/rest/v1/rpc/search_catalogue`, async route => {
+    const f = route.request().postDataJSON()
+    expect(f.page_size).toBe(16)
+    expect(f.audience_filter).toBe('Adults')
+    offsets.push(f.page_offset)
+    await route.fulfill({json:{books:Array.from({length:16},(_,i)=>({
+      ...starter[0],id:`scale-${f.page_offset+i+1}`,slug:`scale-${f.page_offset+i+1}`,title:`Scale book ${f.page_offset+i+1}`,
+    })),total:2000},headers:{'access-control-allow-origin':'*'}})
+  })
+  await page.goto('/adults')
+  await expect(page.getByText('Page 1 of 125')).toBeVisible()
+  await expect(page.getByRole('link',{name:'Scale book 17',exact:true})).toHaveCount(0)
+  await page.getByRole('button',{name:'Next page'}).click()
+  await expect(page.getByRole('link',{name:'Scale book 17',exact:true})).toBeVisible()
+  await expect(page.getByText('Page 2 of 125')).toBeVisible()
+  expect(offsets).toContain(0)
+  expect(offsets).toContain(16)
 })

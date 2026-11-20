@@ -4,6 +4,7 @@ import { BrowserRouter, Link, Route, Routes, useLocation } from 'react-router-do
 import { AdminBooks, AdminFellowship, AdminLayout, AdminModeration } from './admin'
 import { AuthProvider, OAuthCallback } from './auth'
 import { ManageAdmins } from './manage-admins'
+import { CatalogueImport } from './catalogue-admin'
 import { BookPage, FellowshipPage, Home, Library } from './library'
 import { AccountPage, Footer, Header } from './ui'
 import './styles.css'
@@ -32,6 +33,7 @@ function App() {
         <Route path="/admin" element={<AdminLayout />}>
           <Route index element={<AdminBooks />} />
           <Route path="manage-admins" element={<ManageAdmins />} />
+          <Route path="catalogue-import" element={<CatalogueImport />} />
           <Route path="moderation" element={<AdminModeration />} />
           <Route path="fellowship" element={<AdminFellowship />} />
         </Route>
