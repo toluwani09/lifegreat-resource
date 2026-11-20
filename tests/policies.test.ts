@@ -150,7 +150,8 @@ it('stages and publishes only approved, validated editions while protecting the 
     rights_url:'https://example.com/rights',download_url:null,format:'PDF'}
   const stage = 'select public.stage_catalogue_batch($1,$2::jsonb,$3) as result'
   await expect(as(reader,stage,['Fixture',JSON.stringify([edition]),true])).rejects.toThrow(/Administrator/)
-  await expect(as(admin,stage,['Fixture',JSON.stringify([{...edition,publication_year:2019}]),true])).rejects.toThrow(/Invalid edition/)
+  await expect(as(admin,stage,['Fixture',JSON.stringify([{...edition,publication_year:1979}]),true])).rejects.toThrow(/Invalid edition/)
+  expect(await as(admin,stage,['Fixture',JSON.stringify([{...edition,publication_year:1980}]),true])).toEqual([{result:{accepted:1,duplicates:0,batch_id:null}}])
   expect(await as(admin,stage,['Fixture',JSON.stringify([edition,edition]),true])).toEqual([{result:{accepted:1,duplicates:1,batch_id:null}}])
   const rows = await as(admin,stage,['Fixture',JSON.stringify([edition]),false]) as {result:{batch_id:string}}[]
   const batch = rows[0].result.batch_id

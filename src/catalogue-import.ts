@@ -42,7 +42,7 @@ export function parseCatalogue(text: string, filename: string) {
     const audience = read('audience'), topic = read('topic'), format = read('format'), level = read('reading_level')
     const source = read('source_url'), rights = read('rights_url'), download = read('download_url')
     if (!/^[a-z0-9]+(-[a-z0-9]+)*$/.test(values.slug)) fail('slug')
-    if (!Number.isInteger(year) || year < 2020 || year > Number(today.slice(0,4))) fail('publication_year')
+    if (!Number.isInteger(year) || year < 1980 || year > Number(today.slice(0,4))) fail('publication_year')
     if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || !Number.isFinite(+dateValue) ||
       dateValue.toISOString().slice(0,10) !== date || date < `${year}-01-01` || date > today) fail('verified_on')
     if (!['Adults','Children'].includes(audience)) fail('audience')
